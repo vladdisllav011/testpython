@@ -1,12 +1,18 @@
 name: Make Website Screenshot
 
 on:
+  # 1. Ручной запуск с GitHub или через API workflow_dispatch из n8n
   workflow_dispatch:
     inputs:
       target_url:
-        description: 'Вставьте ссылку на сайт или страницу Notion:'
+        description: 'Ссылка на сайт или Notion:'
         required: true
         default: 'https://notion.com'
+        type: string
+      chat_id:
+        description: 'Telegram Chat ID (необязательно, по умолчанию из Secrets):'
+        required: false
+        default: ''
         type: string
 
 jobs:
@@ -31,10 +37,15 @@ jobs:
       - name: Run Playwright script
         env:
           TARGET_URL: ${{ github.event.inputs.target_url }}
+          CUSTOM_CHAT_ID: ${{ github.event.inputs.chat_id }}
+          TG_TOKEN: ${{ secrets.TG_TOKEN }}
+          TG_CHAT_ID: ${{ secrets.TG_CHAT_ID }}
         run: python main.py
 
-      - name: Upload screenshot artifact
+      - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: website-screenshot
-          path: screenshot.png
+          name: website-files
+          path: |
+            screenshot.png
+            page.pdf
