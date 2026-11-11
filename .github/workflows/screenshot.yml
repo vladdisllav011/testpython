@@ -2,6 +2,12 @@ name: Make Website Screenshot
 
 on:
   workflow_dispatch:
+    inputs:
+      target_url:
+        description: 'Вставьте ссылку на сайт или страницу Notion:'
+        required: true
+        default: 'https://notion.com'
+        type: string
 
 jobs:
   build:
@@ -23,6 +29,8 @@ jobs:
           playwright install-deps chromium
 
       - name: Run Playwright script
+        env:
+          TARGET_URL: ${{ github.event.inputs.target_url }}
         run: python main.py
 
       - name: Upload screenshot artifact

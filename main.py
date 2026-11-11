@@ -1,24 +1,25 @@
+import os
 from playwright.sync_api import sync_playwright
 
 def run():
-    url = "https://notion.com"
+    # Берем ссылку из поля ввода GitHub Actions (или используем запасную, если запущено локально)
+    url = os.environ.get(
+        "TARGET_URL", 
+        "https://notion.com"
+    ).strip()
     
     with sync_playwright() as p:
-        # Запускаем самый свежий установленный Chromium
         browser = p.chromium.launch(
             headless=True,
             args=["--disable-blink-features=AutomationControlled"]
         )
         
-        # Сначала узнаем настоящий User-Agent свежего браузера и просто убираем из него слово Headless
+        # Получаем актуальный User-Agent и убираем метку Headless
         temp_context = browser.new_context()
         temp_page = temp_context.new_page()
         real_ua = temp_page.evaluate("navigator.userAgent").replace("HeadlessChrome", "Chrome")
         temp_context.close()
         
-        print("Используем актуальный User-Agent:", real_ua)
-        
-        # Создаем рабочий контекст с честным актуальным User-Agent
         context = browser.new_context(
             viewport={"width": 1440, "height": 900},
             user_agent=real_ua,
@@ -29,10 +30,8 @@ def run():
         print(f"Открываю страницу: {url}...")
         page.goto(url, wait_until="domcontentloaded", timeout=60000)
         
-        # Ждем 10 секунд прогрузки Notion
         print("Жду 10 секунд прогрузки контента...")
         page.wait_for_timeout(10000)
-        
         print("Заголовок вкладки:", page.title())
         
         # Прокручиваем страницу вниз и возвращаем наверх
