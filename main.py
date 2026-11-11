@@ -1,17 +1,27 @@
 from playwright.sync_api import sync_playwright
 
 def run():
-    url = "https://app.notion.com/p/scripnic-ux/Developer-Handoff-Checklist-Free-40989bb9b75780b29fdcc585f7c26d48"
+    url = "https://notion.com"
     
     with sync_playwright() as p:
-        # Добавляем аргумент против детекта headless-браузера
+        # Запускаем самый свежий установленный Chromium
         browser = p.chromium.launch(
             headless=True,
             args=["--disable-blink-features=AutomationControlled"]
         )
+        
+        # Сначала узнаем настоящий User-Agent свежего браузера и просто убираем из него слово Headless
+        temp_context = browser.new_context()
+        temp_page = temp_context.new_page()
+        real_ua = temp_page.evaluate("navigator.userAgent").replace("HeadlessChrome", "Chrome")
+        temp_context.close()
+        
+        print("Используем актуальный User-Agent:", real_ua)
+        
+        # Создаем рабочий контекст с честным актуальным User-Agent
         context = browser.new_context(
             viewport={"width": 1440, "height": 900},
-            user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+            user_agent=real_ua,
             locale="en-US"
         )
         page = context.new_page()
@@ -19,16 +29,13 @@ def run():
         print(f"Открываю страницу: {url}...")
         page.goto(url, wait_until="domcontentloaded", timeout=60000)
         
-        # Ждем 10 секунд, чтобы React-приложение Notion успело отрисоваться
-        print("Жду 10 секунд прогрузки скриптов...")
+        # Ждем 10 секунд прогрузки Notion
+        print("Жду 10 секунд прогрузки контента...")
         page.wait_for_timeout(10000)
         
-        # Выводим в лог реальный заголовок и URL (на случай редиректа или капчи)
-        print("Текущий URL:", page.url)
         print("Заголовок вкладки:", page.title())
         
-        # Пробуем прокрутить страницу (и внутренний скроллер Notion, и само окно)
-        print("Прокручиваю страницу...")
+        # Прокручиваем страницу вниз и возвращаем наверх
         page.evaluate("""
             async () => {
                 const scroller = document.querySelector('.notion-scroller') || document.scrollingElement || document.body;
@@ -44,7 +51,7 @@ def run():
         """)
         page.wait_for_timeout(3000)
         
-        # Вычисляем максимальную высоту контента
+        # Вычисляем полную высоту контента
         full_height = page.evaluate("""
             () => {
                 const scroller = document.querySelector('.notion-scroller');
@@ -54,12 +61,10 @@ def run():
             }
         """)
         
-        # Ограничим максимальную высоту до 15000px, чтобы скриншот не оказался слишком огромным
         target_height = min(full_height + 200, 15000)
         page.set_viewport_size({"width": 1440, "height": target_height})
         page.wait_for_timeout(2000)
         
-        # Делаем скриншот без падения по таймауту
         page.screenshot(path="screenshot.png", full_page=True)
         print(f"Скриншот успешно сохранен! Высота: {target_height}px")
         
