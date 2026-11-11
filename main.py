@@ -4,52 +4,64 @@ def run():
     url = "https://app.notion.com/p/scripnic-ux/Developer-Handoff-Checklist-Free-40989bb9b75780b29fdcc585f7c26d48"
     
     with sync_playwright() as p:
-        browser = p.chromium.launch(headless=True)
-        # Устанавливаем удобное десктопное разрешение и User-Agent
+        # Добавляем аргумент против детекта headless-браузера
+        browser = p.chromium.launch(
+            headless=True,
+            args=["--disable-blink-features=AutomationControlled"]
+        )
         context = browser.new_context(
             viewport={"width": 1440, "height": 900},
-            user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36"
+            user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+            locale="en-US"
         )
         page = context.new_page()
         
-        print(f"Открываю страницу Notion: {url}...")
+        print(f"Открываю страницу: {url}...")
         page.goto(url, wait_until="domcontentloaded", timeout=60000)
         
-        # 1. Ждем, пока Notion отрисует основной контент (заголовок или блоки)
-        page.wait_for_selector(".notion-page-content, h1", timeout=30000)
-        # Даем 3 секунды на догрузку шрифтов, иконок и скриптов
-        page.wait_for_timeout(3000)
+        # Ждем 10 секунд, чтобы React-приложение Notion успело отрисоваться
+        print("Жду 10 секунд прогрузки скриптов...")
+        page.wait_for_timeout(10000)
         
-        # 2. Плавная прокрутка вниз для загрузки всех ленивых блоков
-        print("Прокручиваю страницу для загрузки всего контента...")
+        # Выводим в лог реальный заголовок и URL (на случай редиректа или капчи)
+        print("Текущий URL:", page.url)
+        print("Заголовок вкладки:", page.title())
+        
+        # Пробуем прокрутить страницу (и внутренний скроллер Notion, и само окно)
+        print("Прокручиваю страницу...")
         page.evaluate("""
             async () => {
-                const scroller = document.querySelector('.notion-scroller') || document.documentElement;
+                const scroller = document.querySelector('.notion-scroller') || document.scrollingElement || document.body;
                 const totalHeight = scroller.scrollHeight;
-                for (let pos = 0; pos < totalHeight; pos += 500) {
+                for (let pos = 0; pos < totalHeight; pos += 600) {
                     scroller.scrollTo(0, pos);
+                    window.scrollTo(0, pos);
                     await new Promise(r => setTimeout(r, 200));
                 }
                 scroller.scrollTo(0, 0);
+                window.scrollTo(0, 0);
             }
         """)
-        page.wait_for_timeout(2000)
+        page.wait_for_timeout(3000)
         
-        # 3. Растягиваем окно браузера под реальную высоту страницы Notion,
-        # чтобы внутренний скролл не обрезал нижнюю часть скриншота
+        # Вычисляем максимальную высоту контента
         full_height = page.evaluate("""
             () => {
                 const scroller = document.querySelector('.notion-scroller');
-                return scroller ? scroller.scrollHeight + 200 : document.body.scrollHeight;
+                const h1 = scroller ? scroller.scrollHeight : 0;
+                const h2 = document.body ? document.body.scrollHeight : 0;
+                return Math.max(h1, h2, 900);
             }
         """)
-        if full_height > 900:
-            page.set_viewport_size({"width": 1440, "height": full_height})
-            page.wait_for_timeout(1500)
         
-        # 4. Делаем финальный скриншот
+        # Ограничим максимальную высоту до 15000px, чтобы скриншот не оказался слишком огромным
+        target_height = min(full_height + 200, 15000)
+        page.set_viewport_size({"width": 1440, "height": target_height})
+        page.wait_for_timeout(2000)
+        
+        # Делаем скриншот без падения по таймауту
         page.screenshot(path="screenshot.png", full_page=True)
-        print(f"Скриншот сохранен! Итоговая высота страницы: {full_height}px")
+        print(f"Скриншот успешно сохранен! Высота: {target_height}px")
         
         browser.close()
 
